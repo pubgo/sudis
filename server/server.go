@@ -2,19 +2,32 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"github.com/ihaiker/gokit/logs"
 	"github.com/ihaiker/gokit/remoting"
 	"github.com/ihaiker/gokit/remoting/rpc"
 	runtimeKit "github.com/ihaiker/gokit/runtime"
 	"github.com/ihaiker/sudis/conf"
 	"github.com/ihaiker/sudis/daemon"
+	"os"
+	"strings"
 	"time"
 )
 
 var logger = logs.GetLogger("server")
 
+type Services interface {
+	Start() error
+	Stop() error
+}
+
+func removeSock() {
+	if strings.HasSuffix(conf.Config.Server.Sock, ".sock") {
+		_ = os.Remove(conf.Config.Server.Sock)
+	}
+}
+
 func StartAt(listener *runtimeKit.SignalListener) error {
+	removeSock()
 	dm := daemon.NewDaemonManager(conf.Config.Server.Dir)
 	client := newMasterClient(conf.Config.Server.Master, conf.Config.Server.SecurityToken, dm)
 
@@ -31,18 +44,12 @@ func StartAt(listener *runtimeKit.SignalListener) error {
 		return resp
 	}, nil)
 
-	if err := dm.Start(); err != nil {
-		return err
-	}
-	if err := server.Start(); err != nil {
-		dm.Stop()
-		return err
-	}
+	services := []Services{dm, client, server}
 
-	if err := client.Start(); err != nil {
-		server.Shutdown()
-		dm.Stop()
-		return errors.New("connect master error: " + err.Error())
+	for _, service := range services {
+		if err := service.Start(); err != nil {
+			return err
+		}
 	}
 
 	dm.SetStatusListener(func(process *daemon.Process, oldStatus, newStatus daemon.FSMState) {
@@ -54,9 +61,9 @@ func StartAt(listener *runtimeKit.SignalListener) error {
 
 	listener.PrependOnClose(func() {
 		logger.Debug("关闭服务")
-		client.Stop()
-		server.Shutdown()
-		dm.Stop()
+		for i := len(services) - 1; i >= 0; i-- {
+			_ = services[i].Stop()
+		}
 	})
 
 	return nil
@@ -67,5 +74,5 @@ func Start() error {
 	if err := StartAt(listener); err != nil {
 		return err
 	}
-	return listener.WaitTimeout(time.Second * 10)
+	return listener.WaitTimeout(time.Second * 7)
 }

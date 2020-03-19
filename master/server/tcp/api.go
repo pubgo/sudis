@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"github.com/ihaiker/gokit/remoting/rpc"
 	"github.com/ihaiker/sudis/daemon"
+	"strconv"
 	"time"
 )
 
 type NodeApi struct {
-	server rpc.RpcServer
+	server *masterTcpServer
 }
 
 func (self *NodeApi) Online(node string) bool {
@@ -20,7 +21,7 @@ func (self *NodeApi) ListProgramNames(node string) ([]string, error) {
 	req := new(rpc.Request)
 	req.URL = "list"
 	req.Body, _ = json.Marshal(&[]string{})
-	programNames := []string{}
+	programNames := make([]string, 0)
 	if resp := self.server.Send(node, req, time.Second*7); resp.Error != nil {
 		return nil, resp.Error
 	} else if err := json.Unmarshal(resp.Body, &programNames); err != nil {
@@ -32,7 +33,7 @@ func (self *NodeApi) ListProgram(node string) ([]*daemon.Process, error) {
 	req := new(rpc.Request)
 	req.URL = "list"
 	req.Body, _ = json.Marshal(&[]string{"inspect"})
-	processes := []*daemon.Process{}
+	processes := make([]*daemon.Process, 0)
 	if resp := self.server.Send(node, req, time.Second*7); resp.Error != nil {
 		return nil, resp.Error
 	} else if err := json.Unmarshal(resp.Body, &processes); err != nil {
@@ -108,4 +109,26 @@ func (self *NodeApi) Modify(node, name string, program *daemon.Program) error {
 		return resp.Error
 	}
 	return nil
+}
+
+func (self *NodeApi) TailLogger(node, name, id string, num int, consumer daemon.TailLogger) error {
+	self.server.tails[id] = consumer
+	request := new(rpc.Request)
+	request.URL = "tail"
+	request.Header("num", strconv.Itoa(num))
+	request.Body, _ = json.Marshal([]string{name, "true", id})
+	response := self.server.Send(node, request, time.Second*5)
+	if response.Error != nil {
+		delete(self.server.tails, id)
+	}
+	return response.Error
+}
+
+func (self *NodeApi) UnTailLogger(node, name, id string) error {
+	request := new(rpc.Request)
+	request.URL = "tail"
+	request.Body, _ = json.Marshal([]string{name, "false", id})
+	response := self.server.Send(node, request, time.Second*5)
+	delete(self.server.tails, id)
+	return response.Error
 }

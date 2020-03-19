@@ -27,6 +27,12 @@ func (self *DaemonManager) SetStatusListener(lis FSMStatusListener) {
 	}
 }
 
+func (self *DaemonManager) notifyStatus(process *Process, oldStatus, newStatus FSMState) {
+	if self.statusListener != nil {
+		self.statusListener(process, oldStatus, newStatus)
+	}
+}
+
 func (self *DaemonManager) Start() error {
 	if !self.dir.IsDir() {
 		if err := self.dir.Mkdir(); err != nil {
@@ -63,7 +69,7 @@ func (self *DaemonManager) Start() error {
 	return nil
 }
 
-func (self *DaemonManager) Stop() {
+func (self *DaemonManager) Stop() error {
 	for _, process := range self.process {
 		if process.GetStatus().IsRunning() {
 			if err := process.stopCommand(); err != nil {
@@ -73,22 +79,25 @@ func (self *DaemonManager) Stop() {
 		process.Freed()
 	}
 	logger.Info("stop sudis daemon manager")
+	return nil
 }
 
 func (self *DaemonManager) AddProgram(program *Program) error {
 	if _, err := self.GetProgram(program.Name); err != ErrNotFound {
 		return ErrExists
 	}
-
+	oldStatus := Ready
 	if program.Id == 0 {
 		program.Id = self.MaxId()
+		oldStatus = ""
 	}
 	process := NewProcess(program)
+	if err := process.initLogger(); err != nil {
+		return err
+	}
 	process.statusListener = self.statusListener
 	self.process = append(self.process, process)
-	if self.statusListener != nil {
-		self.statusListener(process, "", process.State)
-	}
+	self.notifyStatus(process, oldStatus, process.State)
 	return nil
 }
 
@@ -128,9 +137,7 @@ func (self *DaemonManager) RemoveProgram(name string, skip bool) error {
 		}
 		p.Freed()
 		if err = self.process.Remove(name); err == nil {
-			if self.statusListener != nil {
-				self.statusListener(p, p.State, "")
-			}
+			self.notifyStatus(p, p.State, "")
 		}
 		return err
 	}
@@ -142,9 +149,11 @@ func (self *DaemonManager) ModifyProgram(program *Program) error {
 	} else if p.GetStatus().IsRunning() {
 		return errors.New("cant modify running program")
 	} else {
+		p.Freed()
 		program.Id = p.Program.Id
-		_ = self.RemoveProgram(p.Program.Name, false)
-		return self.AddProgram(program)
+		p.Program = program
+		self.notifyStatus(p, Ready, p.State)
+		return p.initLogger()
 	}
 }
 

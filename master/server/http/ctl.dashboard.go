@@ -53,7 +53,7 @@ func getRelease() (*GithubRelease, error) {
 	}
 }
 
-func dashboard(ctx iris.Context) *JSON {
+func dashboard(ctx iris.Context) *dao.JSON {
 
 	nodes, err := dao.NodeDao.List()
 	AssertErr(err)
@@ -67,9 +67,9 @@ func dashboard(ctx iris.Context) *JSON {
 
 	programs, err := dao.ProgramDao.List("", "", "", "", 1, 30000)
 	AssertErr(err)
-	allProgram := len(programs)
+	allProgram := len(programs.Data.([]*dao.Program))
 	startedProgram := 0
-	for _, program := range programs {
+	for _, program := range programs.Data.([]*dao.Program) {
 		if program.Status.IsRunning() {
 			startedProgram += 1
 		}
@@ -85,16 +85,16 @@ func dashboard(ctx iris.Context) *JSON {
 		}
 	}
 
-	return &JSON{
-		"node": &JSON{
+	return &dao.JSON{
+		"node": &dao.JSON{
 			"all":    allNode,
 			"online": onlineNode,
 		},
-		"process": &JSON{
+		"process": &dao.JSON{
 			"all":     allProgram,
 			"started": startedProgram,
 		},
-		"info":    &JSON{"CPU": cpu, "RAM": ram},
+		"info":    &dao.JSON{"CPU": cpu, "RAM": ram},
 		"version": release,
 	}
 }

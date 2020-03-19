@@ -45,6 +45,8 @@ type Program struct {
 	//程序名称
 	Name string `json:"name" yaml:"name" yaml:"name"`
 
+	Description string `json:"description" yaml:"description" toml:"description"`
+
 	//工作目录
 	WorkDir string `json:"workDir" yaml:"workDir" yaml:"workDir"`
 
@@ -79,6 +81,9 @@ type Program struct {
 
 	AddTime    time.Time `json:"addTime" yaml:"addTime" yaml:"addTime"`
 	UpdateTime time.Time `json:"updateTime" yaml:"updateTime" yaml:"updateTime"`
+
+	//日志文件位置
+	Logger string `json:"logger" yaml:"logger" toml:"logger"`
 }
 
 func (this *Program) IsForeground() bool {

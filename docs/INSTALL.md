@@ -156,6 +156,14 @@ $ sudis # single 是默认命令
 打开地址 http://master:5984 即可。`master`:为主控节点IP， 默认的登录用户为:admin，密码：12345678
 
 
+### 开机启动支持：
+
+```shell script
+./sudis initd single # 单节点服务
+./sudis initd server # 服务节点
+./sudis initd master # 主控节点 
+```
+注：不能在同一台机器上同时安装不同节点
 
 ## 更多命令
 

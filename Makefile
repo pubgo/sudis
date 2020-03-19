@@ -1,3 +1,5 @@
+.PHONY: build webui bindata install release clean linux windows
+
 binout=bin/sudis
 
 ifeq ($(P),release)
@@ -21,11 +23,19 @@ build: bindata
 	go mod download
 	go build -tags bindata -ldflags "${debug} ${param}" -o ${binout}
 
-bindata: webui
+bindata:
 	go generate generator.go
 
 webui:
 	make -C webui build
+
+linux:
+	go mod download
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags bindata -ldflags "${debug} ${param}" -o ${binout}-linux
+
+windows:
+	go mod download
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags bindata -ldflags "${debug} ${param}" -o /Users/haiker/Downloads/${binout}-windows.exe
 
 install: clean build
 	@mkdir -p bin/conf
@@ -40,4 +50,4 @@ clean:
 	@rm -rf webui/node_modules
 	@rm -f master/server/http/http_static_bindata_assets.go
 
-.PHONY: build webui bindata install release clean
+

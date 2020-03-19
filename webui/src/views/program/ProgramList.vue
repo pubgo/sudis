@@ -15,21 +15,25 @@
                     <th>进程名</th>
                     <th>节点</th>
                     <th>标签</th>
-                    <th style="width: 340px;">状态 &amp; 操作</th>
+                    <th style="width: 285px;">状态 &amp; 操作</th>
+                    <th style="width: 55px;">日志</th>
                     <th style="width: 180px;">状态时间</th>
                 </tr>
                 </thead>
                 <tbody>
-                <tr v-for="(p) in programs">
+                <tr v-for="(p) in programs.data">
                     <td>
                         <router-link :to="{path:'/admin/program',query:{node:p.node,name:p.name}}">
                             {{p.name}}
                         </router-link>
+                        <template v-if="p.description">
+                            <br/><span class="small">{{p.description}}</span>
+                        </template>
                     </td>
                     <td>
                         {{nodeShow(p.node)}}
                         <span v-if="!nodeOnline(p.node)" class="text-danger">
-                             <span class="spinner-border spinner-border-xs" role="status" aria-hidden="true"/>
+                             <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"/>
                         </span>
                     </td>
                     <td>
@@ -38,10 +42,16 @@
                     <td class="overflow-hidden">
                         <status :program="p" @change="queryPrograms" @edit="editProgram = $event"/>
                     </td>
+                    <td>
+                        <router-link class="btn btn-sm btn-default" :to="{path:'/admin/program/logs',query:{node:p.node,name:p.name}}">
+                            <i class="fa fa-file-text"/>
+                        </router-link>
+                    </td>
                     <td>{{p.time}}</td>
                 </tr>
                 </tbody>
             </table>
+            <XPage :items="programs" @change="queryPrograms"/>
         </div>
         <Create :program="editProgram" :nodes="nodes" @change="queryPrograms"/>
     </div>
@@ -53,15 +63,15 @@
     import Create from "./create";
     import Tags from "./tags";
     import vTitle from "../../plugins/vTitle";
+    import XPage from "../../plugins/XPage";
 
     export default {
         name: "ProgramList",
-        components: {vTitle, Tags, Create, Status, Search},
+        components: {XPage, vTitle, Tags, Create, Status, Search},
         data: () => ({
-            programs: [],
-            tags: [],
-            nodes: [],
-            editProgram: null
+            programs: {},
+            tags: [], nodes: [],
+            editProgram: null, form: {},
         }),
         mounted() {
             this.queryNodes();
@@ -81,10 +91,10 @@
             },
 
             queryPrograms(form) {
-                let requestData = form || {};
+                this.form = this.twoJsonMerge(this.form, form || {});
                 let self = this;
-                self.programs = [];
-                this.$axios.get("/admin/program/list?" + this.$form.transformRequest[0](requestData))
+                self.programs = {};
+                this.$axios.get("/admin/program/list?" + this.$form.transformRequest[0](this.form))
                     .then(res => self.programs = res)
                     .catch(e => {
                         self.$toast.error(e.message);
@@ -117,5 +127,8 @@
         width: 0.65rem;
         height: 0.65rem;
         border-width: 0.2em;
+    }
+    table.table-hover>tbody>tr:hover>td, table.table-hover>tbody>tr:hover>th {
+        background-color: rgba(37, 236, 49, 0.29);
     }
 </style>

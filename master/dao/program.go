@@ -2,9 +2,9 @@ package dao
 
 import (
 	"errors"
-	"github.com/ihaiker/gokit/commons"
 	"github.com/ihaiker/sudis/daemon"
 	"strings"
+	"xorm.io/xorm"
 )
 
 type Tags []string
@@ -48,12 +48,13 @@ func (t *Tags) Remove(tag string) {
 }
 
 type Program struct {
-	Name   string          `json:"name" yaml:"name" toml:"name" xorm:"name"`
-	Node   string          `json:"node" yaml:"node" toml:"node" xorm:"node"`
-	Tags   Tags            `json:"tags" yaml:"tags" toml:"tags" xorm:"tags"`
-	Status daemon.FSMState `json:"status" yaml:"status" toml:"status" xorm:"status"`
-	Time   string          `json:"time" yaml:"time" toml:"time" xorm:"time"`
-	Sort   uint64          `json:"sort" yaml:"sort" toml:"sort" xorm:"sort"`
+	Name        string          `json:"name" yaml:"name" toml:"name" xorm:"name"`
+	Description string          `json:"description" yaml:"description" toml:"description"`
+	Node        string          `json:"node" yaml:"node" toml:"node" xorm:"node"`
+	Tags        Tags            `json:"tags" yaml:"tags" toml:"tags" xorm:"tags"`
+	Status      daemon.FSMState `json:"status" yaml:"status" toml:"status" xorm:"status"`
+	Time        string          `json:"time" yaml:"time" toml:"time" xorm:"time"`
+	Sort        uint64          `json:"sort" yaml:"sort" toml:"sort" xorm:"sort"`
 }
 
 type programDao struct {
@@ -64,22 +65,35 @@ func (self *programDao) Ready() {
 	logger.Debug(err)
 }
 
-func (self *programDao) List(name, node, tag string, status string, page, limit int) (programs []*Program, err error) {
-	programs = make([]*Program, 0)
-	s := engine.Desc("sort").Asc("time")
-	if name != "" {
-		s = s.And("name like ?", "%"+name+"%")
+func (self *programDao) List(name, node, tag string, status string, page, limit int) (pageInfo *Page, err error) {
+	sn := func() *xorm.Session {
+		s := engine.Desc("sort").Asc("time")
+		if name != "" {
+			s = s.And("(name like ? or description like ?)", "%"+name+"%", "%"+name+"%")
+		}
+		if node != "" {
+			s = s.And("node = ?", node)
+		}
+		if tag != "" {
+			s = s.And(" tags like ?", "%("+tag+")%")
+		}
+		if status != "" {
+			s = s.And("status = ?", status)
+		}
+		return s
 	}
-	if node != "" {
-		s = s.And("node = ?", node)
+
+	programs := make([]*Program, 0)
+	pageInfo = &Page{
+		Total: 0,
+		Page:  page,
+		Limit: limit,
 	}
-	if tag != "" {
-		s = s.And(" tags like ?", "%("+tag+")%")
+	if pageInfo.Total, err = sn().Count(new(Program)); err != nil {
+		return
 	}
-	if status != "" {
-		s = s.And("status = ?", status)
-	}
-	err = s.Limit(limit, (page-1)*limit).Find(&programs)
+	err = sn().Limit(limit, (page-1)*limit).Find(&programs)
+	pageInfo.Data = programs
 	return
 }
 
@@ -100,8 +114,9 @@ func (self *programDao) Add(program *Program) error {
 	}
 }
 
-func (self *programDao) UpdateStatus(node, name string, status daemon.FSMState) error {
-	_, err := engine.Cols("status").Update(&Program{Status: status}, &Program{Node: node, Name: name})
+func (self *programDao) UpdateStatus(node, name, description string, status daemon.FSMState) error {
+	_, err := engine.Cols("status", "description").
+		Update(&Program{Status: status, Description: description}, &Program{Node: node, Name: name})
 	return err
 }
 
@@ -109,7 +124,7 @@ func (self *programDao) ModifyTag(name, node, tag string, add bool) error {
 	if pro, has, err := self.Get(name, node); err != nil {
 		return err
 	} else if !has {
-		return commons.ErrNotFound
+		return ErrNotExist
 	} else {
 		if add {
 			pro.Tags.Add(tag)
@@ -122,7 +137,7 @@ func (self *programDao) ModifyTag(name, node, tag string, add bool) error {
 }
 
 func (self *programDao) Lost(key string) {
-	_, _ = engine.Cols("status", "time").Update(&Program{Status: daemon.Stoped, Time: Timestamp()}, &Program{Node: key})
+	_, _ = engine.Cols("status").Update(&Program{Status: daemon.Stoped}, &Program{Node: key})
 }
 
 func (self *programDao) Remove(node string, name string) error {
